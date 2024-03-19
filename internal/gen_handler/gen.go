@@ -1,4 +1,4 @@
-package main
+package gen_handler
 
 import (
 	"bytes"
@@ -7,14 +7,8 @@ import (
 
 	"github.com/lestrrat-go/codegen"
 	"github.com/pkg/errors"
+	"golang.org/x/tools/go/packages"
 )
-
-func main() {
-	if err := _main(); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-}
 
 var typs = []struct {
 	Name string
@@ -73,20 +67,38 @@ var typs = []struct {
 	{Name: "ValueSpec"},
 }
 
-func _main() error {
+func GenHandler(dir string) error {
 	if err := genHandlers(); err != nil {
 		return errors.Wrap(err, `failed to generate handlers`)
 	}
 
-	if err := genVisitor(); err != nil {
+	if err := genVisitor(dir); err != nil {
 		return errors.Wrap(err, `failed to generate visitor`)
 	}
 	return nil
 }
 
-func genVisitor() error {
+func getPackageName(dir string) (*packages.Package, error) {
+	pkgs, err := packages.Load(&packages.Config{
+		Mode:  packages.NeedName | packages.NeedFiles,
+		Tests: false,
+	}, dir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load packages: %w", err)
+	}
+	if len(pkgs) == 0 {
+		return nil, fmt.Errorf("cannot find any package in %v", dir)
+	}
+	return pkgs[0], nil
+}
+
+func genVisitor(dir string) error {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "package astv")
+	packageName, err := getPackageName(dir)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(&buf, fmt.Sprintf("package %s", packageName))
 
 	fmt.Fprintf(&buf, "\n\ntype Visitor struct {")
 	for _, typ := range typs {
