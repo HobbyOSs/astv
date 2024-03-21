@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/lestrrat-go/codegen"
 	"github.com/pkg/errors"
@@ -68,17 +69,24 @@ var typs = []struct {
 }
 
 func GenHandler(dir string) error {
-	if err := genHandlers(); err != nil {
-		return errors.Wrap(err, `failed to generate handlers`)
+	pkg, err := getPackageInfo(dir)
+	if err != nil {
+		return err
 	}
 
-	if err := genVisitor(dir); err != nil {
+	fmt.Printf("package: %+v \n", *pkg)
+	packageName := filepath.Base(pkg.PkgPath)
+
+	if err := genHandlers(dir, packageName); err != nil {
+		return errors.Wrap(err, `failed to generate handlers`)
+	}
+	if err := genVisitor(dir, packageName); err != nil {
 		return errors.Wrap(err, `failed to generate visitor`)
 	}
 	return nil
 }
 
-func getPackageName(dir string) (*packages.Package, error) {
+func getPackageInfo(dir string) (*packages.Package, error) {
 	pkgs, err := packages.Load(&packages.Config{
 		Mode:  packages.NeedName | packages.NeedFiles,
 		Tests: false,
@@ -92,12 +100,8 @@ func getPackageName(dir string) (*packages.Package, error) {
 	return pkgs[0], nil
 }
 
-func genVisitor(dir string) error {
+func genVisitor(dir string, packageName string) error {
 	var buf bytes.Buffer
-	packageName, err := getPackageName(dir)
-	if err != nil {
-		return err
-	}
 	fmt.Fprintf(&buf, fmt.Sprintf("package %s", packageName))
 
 	fmt.Fprintf(&buf, "\n\ntype Visitor struct {")
@@ -140,7 +144,9 @@ func genVisitor(dir string) error {
 	fmt.Fprintf(&buf, "\nreturn v")
 	fmt.Fprintf(&buf, "\n}")
 
-	if err := codegen.WriteFile("visitor_gen.go", &buf, codegen.WithFormatCode(true)); err != nil {
+	visitors_gen_path := filepath.Join(dir, "visitor_gen.go")
+	if err := codegen.WriteFile(visitors_gen_path, &buf, codegen.WithFormatCode(true)); err != nil {
+		fmt.Printf("written: %s \n", visitors_gen_path)
 		if cfe, ok := err.(codegen.CodeFormatError); ok {
 			fmt.Fprint(os.Stderr, cfe.Source())
 		}
@@ -150,9 +156,9 @@ func genVisitor(dir string) error {
 	return nil
 }
 
-func genHandlers() error {
+func genHandlers(dir string, packageName string) error {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "package astv")
+	fmt.Fprintf(&buf, fmt.Sprintf("package %s", packageName))
 
 	for _, typ := range typs {
 		fmt.Fprintf(&buf, "\n\ntype %sHandler interface {", typ.Name)
@@ -164,7 +170,9 @@ func genHandlers() error {
 	fmt.Fprintf(&buf, "\nHandle(ast.Node) bool")
 	fmt.Fprintf(&buf, "\n}")
 
-	if err := codegen.WriteFile("handlers_gen.go", &buf, codegen.WithFormatCode(true)); err != nil {
+	handlers_gen_path := filepath.Join(dir, "handlers_gen.go")
+	if err := codegen.WriteFile(handlers_gen_path, &buf, codegen.WithFormatCode(true)); err != nil {
+		fmt.Printf("written: %s \n", handlers_gen_path)
 		if cfe, ok := err.(codegen.CodeFormatError); ok {
 			fmt.Fprint(os.Stderr, cfe.Source())
 		}

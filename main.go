@@ -1,9 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"flag"
+	"fmt"
 	"os"
+
 	"github.com/HobbyOSs/astv/internal/gen_handler"
 )
 
