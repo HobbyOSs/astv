@@ -6,24 +6,23 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/HobbyOSs/astv/internal/option"
 	"github.com/lestrrat-go/codegen"
 	"github.com/pkg/errors"
 	"golang.org/x/tools/go/packages"
 )
 
-func GenHandler(dir string, astTypes []string) error {
-	pkg, err := getPackageInfo(dir)
+func GenHandler(opts *option.Options) error {
+	pkg, err := getPackageInfo(opts.Dir)
 	if err != nil {
 		return err
 	}
-
-	fmt.Printf("package: %+v \n", *pkg)
 	packageName := filepath.Base(pkg.PkgPath)
 
-	if err := genHandlers(dir, packageName, astTypes); err != nil {
+	if err := genHandlers(opts, packageName); err != nil {
 		return errors.Wrap(err, `failed to generate handlers`)
 	}
-	if err := genVisitor(dir, packageName, astTypes); err != nil {
+	if err := genVisitor(opts, packageName); err != nil {
 		return errors.Wrap(err, `failed to generate visitor`)
 	}
 	return nil
@@ -43,19 +42,19 @@ func getPackageInfo(dir string) (*packages.Package, error) {
 	return pkgs[0], nil
 }
 
-func genVisitor(dir string, packageName string, astTypes []string) error {
+func genVisitor(opts *option.Options, packageName string) error {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, fmt.Sprintf("package %s", packageName))
 
 	fmt.Fprintf(&buf, "\n\ntype Visitor struct {")
-	for _, typ := range astTypes {
+	for _, typ := range opts.AstTypes {
 		fmt.Fprintf(&buf, "\nh%[1]s %[1]sHandler", typ)
 	}
 	fmt.Fprintf(&buf, "\nhDefault DefaultHandler")
 	fmt.Fprintf(&buf, "\n}")
 
 	fmt.Fprintf(&buf, "\n\nfunc (v *Visitor) Handler(h interface{}) error {")
-	for _, typ := range astTypes {
+	for _, typ := range opts.AstTypes {
 		fmt.Fprintf(&buf, "\nif x, ok := h.(%sHandler); ok {", typ)
 		fmt.Fprintf(&buf, "\nv.h%s = x", typ)
 		fmt.Fprintf(&buf, "\n}")
@@ -68,7 +67,7 @@ func genVisitor(dir string, packageName string, astTypes []string) error {
 
 	fmt.Fprintf(&buf, "\n\nfunc (v *Visitor) Visit(n ast.Node) ast.Visitor {")
 	fmt.Fprintf(&buf, "\nswitch n := n.(type) {")
-	for _, typ := range astTypes {
+	for _, typ := range opts.AstTypes {
 		fmt.Fprintf(&buf, "\ncase *ast.%s:", typ)
 		fmt.Fprintf(&buf, "\nif h := v.h%s; h != nil {", typ)
 		fmt.Fprintf(&buf, "\nif ! h.%s(n) {", typ)
@@ -87,9 +86,8 @@ func genVisitor(dir string, packageName string, astTypes []string) error {
 	fmt.Fprintf(&buf, "\nreturn v")
 	fmt.Fprintf(&buf, "\n}")
 
-	visitors_gen_path := filepath.Join(dir, "visitor_gen.go")
-	if err := codegen.WriteFile(visitors_gen_path, &buf, codegen.WithFormatCode(true)); err != nil {
-		fmt.Printf("written: %s \n", visitors_gen_path)
+	visitors_gen_path := filepath.Join(opts.Dir, "visitor_gen.go")
+	if err := codegen.WriteFile(visitors_gen_path, &buf, codegen.WithFormatCode(opts.FormatCode)); err != nil {
 		if cfe, ok := err.(codegen.CodeFormatError); ok {
 			fmt.Fprint(os.Stderr, cfe.Source())
 		}
@@ -99,11 +97,11 @@ func genVisitor(dir string, packageName string, astTypes []string) error {
 	return nil
 }
 
-func genHandlers(dir string, packageName string, astTypes []string) error {
+func genHandlers(opts *option.Options, packageName string) error {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, fmt.Sprintf("package %s", packageName))
 
-	for _, typ := range astTypes {
+	for _, typ := range opts.AstTypes {
 		fmt.Fprintf(&buf, "\n\ntype %sHandler interface {", typ)
 		fmt.Fprintf(&buf, "%[1]s(*ast.%[1]s) bool", typ)
 		fmt.Fprintf(&buf, "\n}")
@@ -113,8 +111,8 @@ func genHandlers(dir string, packageName string, astTypes []string) error {
 	fmt.Fprintf(&buf, "\nHandle(ast.Node) bool")
 	fmt.Fprintf(&buf, "\n}")
 
-	handlers_gen_path := filepath.Join(dir, "handlers_gen.go")
-	if err := codegen.WriteFile(handlers_gen_path, &buf, codegen.WithFormatCode(true)); err != nil {
+	handlers_gen_path := filepath.Join(opts.Dir, "handlers_gen.go")
+	if err := codegen.WriteFile(handlers_gen_path, &buf, codegen.WithFormatCode(opts.FormatCode)); err != nil {
 		fmt.Printf("written: %s \n", handlers_gen_path)
 		if cfe, ok := err.(codegen.CodeFormatError); ok {
 			fmt.Fprint(os.Stderr, cfe.Source())
