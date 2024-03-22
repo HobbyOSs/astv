@@ -65,10 +65,10 @@ func genVisitor(opts *option.Options, packageName string) error {
 	fmt.Fprintf(&buf, "\nreturn nil")
 	fmt.Fprintf(&buf, "\n}")
 
-	fmt.Fprintf(&buf, "\n\nfunc (v *Visitor) Visit(n ast.Node) ast.Visitor {")
+	fmt.Fprintf(&buf, "\n\nfunc (v *Visitor) Visit(n Node) *Visitor {")
 	fmt.Fprintf(&buf, "\nswitch n := n.(type) {")
 	for _, typ := range opts.AstTypes {
-		fmt.Fprintf(&buf, "\ncase *ast.%s:", typ)
+		fmt.Fprintf(&buf, "\ncase *%s:", typ)
 		fmt.Fprintf(&buf, "\nif h := v.h%s; h != nil {", typ)
 		fmt.Fprintf(&buf, "\nif ! h.%s(n) {", typ)
 		fmt.Fprintf(&buf, "\nreturn nil")
@@ -103,12 +103,12 @@ func genHandlers(opts *option.Options, packageName string) error {
 
 	for _, typ := range opts.AstTypes {
 		fmt.Fprintf(&buf, "\n\ntype %sHandler interface {", typ)
-		fmt.Fprintf(&buf, "%[1]s(*ast.%[1]s) bool", typ)
+		fmt.Fprintf(&buf, "%[1]s(*%[1]s) bool", typ)
 		fmt.Fprintf(&buf, "\n}")
 	}
 
 	fmt.Fprintf(&buf, "\n\ntype DefaultHandler interface {")
-	fmt.Fprintf(&buf, "\nHandle(ast.Node) bool")
+	fmt.Fprintf(&buf, "\nHandle(Node) bool")
 	fmt.Fprintf(&buf, "\n}")
 
 	handlers_gen_path := filepath.Join(opts.Dir, "handlers_gen.go")
